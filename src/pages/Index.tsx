@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BillProvider, useBill } from '@/context/BillContext';
 import Header from '@/components/Header';
 import BillCapture from '@/components/BillCapture';
@@ -20,12 +20,17 @@ const AppContent: React.FC = () => {
       default: return 'Bill Splitter';
     }
   };
+
+  useEffect(() => {
+    // Update document title when active step changes
+    document.title = getStepTitle();
+  }, [activeStep]);
   
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-background">
       <Header />
       
-      <main className="flex-1 pt-16">
+      <main className="flex-1 pt-16 px-4 overflow-auto">
         {activeStep === 0 && <BillCapture />}
         {activeStep === 1 && <BillAnalysis />}
         {activeStep === 2 && <PeopleSplitter />}

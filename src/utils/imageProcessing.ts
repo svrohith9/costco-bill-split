@@ -77,6 +77,14 @@ export const performOCR = async (imageUrl: string): Promise<string> => {
       preserve_interword_spaces: '1',
     });
     
+    // Detect if we're on a mobile device for potential optimizations
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    
+    // Mobile devices might need additional optimizations
+    if (isMobile) {
+      console.log('Running OCR on mobile device');
+    }
+    
     const ret = await worker.recognize(imageUrl);
     const text = ret.data.text;
     
