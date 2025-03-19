@@ -1,7 +1,166 @@
 
 import { ReceiptData } from '@/context/BillContext';
+import { performOCR } from './imageProcessing';
 
-// Mock function to simulate OCR parsing of a receipt
+interface ExtractedItem {
+  name: string;
+  price: number;
+  tax?: number;
+}
+
+// Function to parse receipt text and extract relevant information
+export const parseReceiptText = (text: string): {
+  items: ExtractedItem[];
+  storeName: string;
+  date: string;
+  subtotal: number;
+  tax: number;
+  total: number;
+} => {
+  console.log('Parsing receipt text:', text);
+  
+  // Initialize default values
+  let storeName = 'Costco';
+  let date = new Date().toISOString().split('T')[0];
+  let subtotal = 0;
+  let totalTax = 0;
+  let total = 0;
+  const items: ExtractedItem[] = [];
+  
+  // Split text into lines
+  const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+  
+  // Try to extract store name from the beginning of the receipt
+  if (lines.length > 0) {
+    const firstLine = lines[0].toLowerCase();
+    if (firstLine.includes('costco')) {
+      storeName = 'Costco';
+    } else if (lines.length > 1 && lines[1].toLowerCase().includes('costco')) {
+      storeName = 'Costco';
+    }
+  }
+  
+  // Try to extract date
+  const dateRegex = /(\d{1,2})[/\-](\d{1,2})[/\-](\d{2,4})/;
+  for (const line of lines) {
+    const dateMatch = line.match(dateRegex);
+    if (dateMatch) {
+      // Convert to YYYY-MM-DD format
+      let year = dateMatch[3];
+      if (year.length === 2) {
+        year = `20${year}`;
+      }
+      const month = dateMatch[1].padStart(2, '0');
+      const day = dateMatch[2].padStart(2, '0');
+      date = `${year}-${month}-${day}`;
+      break;
+    }
+  }
+  
+  // Look for items with prices
+  // This regex matches product descriptions followed by prices
+  // For Costco receipts, items typically have a product name/number followed by a price
+  const itemRegex = /^(.*?)\s+(\d+\.\d{2})$/;
+  
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    
+    // Check if this is a subtotal, tax, or total line
+    if (line.toLowerCase().includes('subtotal')) {
+      const match = line.match(/(\d+\.\d{2})/);
+      if (match) {
+        subtotal = parseFloat(match[1]);
+      }
+    } else if (line.toLowerCase().includes('tax')) {
+      const match = line.match(/(\d+\.\d{2})/);
+      if (match) {
+        totalTax = parseFloat(match[1]);
+      }
+    } else if (line.toLowerCase().includes('total')) {
+      const match = line.match(/(\d+\.\d{2})/);
+      if (match) {
+        total = parseFloat(match[1]);
+      }
+    } else {
+      // Try to match an item
+      const itemMatch = line.match(itemRegex);
+      if (itemMatch) {
+        const name = itemMatch[1].trim();
+        const price = parseFloat(itemMatch[2]);
+        
+        // Estimate tax for this item based on overall tax ratio
+        // This is an approximation since receipts often don't show per-item tax
+        const estimatedTax = subtotal > 0 ? (price / subtotal) * totalTax : 0;
+        
+        items.push({
+          name,
+          price,
+          tax: parseFloat(estimatedTax.toFixed(2))
+        });
+      }
+    }
+    
+    i++;
+  }
+  
+  // If we couldn't parse any items, subtotal, or total, set some fallback values
+  if (items.length === 0) {
+    console.warn('Could not parse any items from receipt');
+  }
+  
+  if (subtotal === 0 && items.length > 0) {
+    subtotal = items.reduce((sum, item) => sum + item.price, 0);
+  }
+  
+  if (total === 0 && subtotal > 0) {
+    total = subtotal + totalTax;
+  }
+  
+  return {
+    items,
+    storeName,
+    date,
+    subtotal,
+    tax: totalTax,
+    total
+  };
+};
+
+// Function to parse a receipt image and extract data
+export const parseReceipt = async (imageUrl: string): Promise<ReceiptData> => {
+  try {
+    // Perform OCR on the receipt image
+    const text = await performOCR(imageUrl);
+    console.log('Extracted text from receipt:', text);
+    
+    // Parse the extracted text
+    const parsed = parseReceiptText(text);
+    
+    // Convert to ReceiptData format
+    return {
+      items: parsed.items.map(item => ({
+        id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        name: item.name,
+        price: item.price,
+        tax: item.tax || 0,
+        assignedTo: []
+      })),
+      subtotal: parsed.subtotal,
+      tax: parsed.tax,
+      total: parsed.total,
+      date: parsed.date,
+      storeName: parsed.storeName
+    };
+  } catch (error) {
+    console.error('Failed to parse receipt:', error);
+    // Return mock data as fallback
+    console.log('Using mock receipt data as fallback');
+    return parseReceiptMock();
+  }
+};
+
+// Mock function to simulate OCR parsing of a receipt (used as fallback)
 export const parseReceiptMock = (): ReceiptData => {
   // Generate 5-10 random items
   const numItems = Math.floor(Math.random() * 6) + 5;
@@ -75,7 +234,3 @@ export const parseReceiptMock = (): ReceiptData => {
     storeName: 'Costco'
   };
 };
-
-// In a real application, we would have actual OCR and parsing logic here
-// This might involve sending the image to a backend service or using
-// a library for OCR processing

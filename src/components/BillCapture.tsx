@@ -1,33 +1,57 @@
 
 import React, { useRef, useState } from 'react';
 import { useBill } from '@/context/BillContext';
-import { Camera, Upload, Loader2 } from 'lucide-react';
+import { Camera, Upload, Loader2, Image } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { compressImage } from '@/utils/imageProcessing';
 import { toast } from '@/components/ui/use-toast';
 
 const BillCapture: React.FC = () => {
   const { setCurrentImage, setActiveStep, setIsAnalyzing } = useBill();
   const [preview, setPreview] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       if (file.type.match('image.*')) {
-        const reader = new FileReader();
-        
-        reader.onload = (event) => {
-          if (event.target) {
-            const imageUrl = event.target.result as string;
-            setPreview(imageUrl);
-            setCurrentImage(imageUrl);
-            processImage();
-          }
-        };
-        
-        reader.readAsDataURL(file);
+        setIsProcessing(true);
+        try {
+          const reader = new FileReader();
+          
+          reader.onload = async (event) => {
+            if (event.target) {
+              const imageUrl = event.target.result as string;
+              
+              // Compress the image to improve OCR performance
+              try {
+                const compressedImage = await compressImage(imageUrl);
+                setPreview(compressedImage);
+                setCurrentImage(compressedImage);
+                processImage();
+              } catch (error) {
+                console.error('Error compressing image:', error);
+                // Use original image if compression fails
+                setPreview(imageUrl);
+                setCurrentImage(imageUrl);
+                processImage();
+              }
+            }
+          };
+          
+          reader.readAsDataURL(file);
+        } catch (error) {
+          console.error('Error processing image:', error);
+          setIsProcessing(false);
+          toast({
+            title: "Error",
+            description: "Failed to process image. Please try again.",
+            variant: "destructive"
+          });
+        }
       } else {
         toast({
           title: "Invalid file type",
@@ -47,7 +71,14 @@ const BillCapture: React.FC = () => {
   const capturePhoto = async () => {
     try {
       setIsCapturing(true);
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        } 
+      });
+      
       const video = document.createElement('video');
       video.srcObject = stream;
       video.play();
@@ -60,15 +91,16 @@ const BillCapture: React.FC = () => {
         
         if (ctx) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageUrl = canvas.toDataURL('image/jpeg');
-          setPreview(imageUrl);
-          setCurrentImage(imageUrl);
+          const imageUrl = canvas.toDataURL('image/jpeg', 0.9);
           
           // Stop the video stream
           const tracks = stream.getTracks();
           tracks.forEach(track => track.stop());
-          setIsCapturing(false);
           
+          setIsCapturing(false);
+          setIsProcessing(true);
+          setPreview(imageUrl);
+          setCurrentImage(imageUrl);
           processImage();
         }
       }, 1000);
@@ -85,12 +117,13 @@ const BillCapture: React.FC = () => {
   
   const processImage = () => {
     setIsAnalyzing(true);
-    // In a real app, we would send the image to a backend service for processing
-    // For now, we'll simulate a delay and then move to the next step
-    setTimeout(() => {
-      setActiveStep(1);
-      setIsAnalyzing(false);
-    }, 2000);
+    setActiveStep(1);
+  };
+  
+  const retakePhoto = () => {
+    setPreview(null);
+    setCurrentImage(null);
+    setIsProcessing(false);
   };
   
   return (
@@ -104,11 +137,22 @@ const BillCapture: React.FC = () => {
                 alt="Receipt preview" 
                 className="w-full h-full object-contain" 
               />
+              {!isProcessing && (
+                <Button
+                  onClick={retakePhoto}
+                  variant="secondary"
+                  className="absolute bottom-4 right-4"
+                >
+                  Retake
+                </Button>
+              )}
             </div>
-            <div className="flex justify-center items-center w-full">
-              <Loader2 className="animate-spin mr-2" size={20} />
-              <p className="text-muted-foreground">Analyzing receipt...</p>
-            </div>
+            {isProcessing && (
+              <div className="flex justify-center items-center w-full">
+                <Loader2 className="animate-spin mr-2" size={20} />
+                <p className="text-muted-foreground">Preparing for analysis...</p>
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -116,7 +160,13 @@ const BillCapture: React.FC = () => {
               <div className="text-center">
                 <p className="text-muted-foreground mb-2">Take a photo of your Costco receipt</p>
                 <p className="text-xs text-muted-foreground/70 mb-6">
-                  Make sure the receipt is flat, well-lit, and all items are visible
+                  For best results:
+                  <ul className="list-disc text-left ml-5 mt-2">
+                    <li>Make sure the receipt is flat</li>
+                    <li>Ensure good lighting</li>
+                    <li>Capture the entire receipt</li>
+                    <li>Avoid shadows and glare</li>
+                  </ul>
                 </p>
                 
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -138,7 +188,7 @@ const BillCapture: React.FC = () => {
                     variant="outline"
                     className="flex items-center gap-2"
                   >
-                    <Upload size={16} className="mr-2" />
+                    <Image size={16} className="mr-2" />
                     Upload Image
                   </Button>
                   

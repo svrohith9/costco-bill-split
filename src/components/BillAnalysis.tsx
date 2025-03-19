@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useBill } from '@/context/BillContext';
 import { Button } from '@/components/ui/button';
@@ -6,10 +5,11 @@ import { Card } from '@/components/ui/card';
 import { CheckCircle, Edit2, Plus, Trash2, AlertCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { parseReceiptMock } from '@/utils/receiptParser';
+import { parseReceipt } from '@/utils/receiptParser';
+import { toast } from '@/components/ui/use-toast';
 
 const BillAnalysis: React.FC = () => {
-  const { currentImage, setReceiptData, setActiveStep } = useBill();
+  const { currentImage, setReceiptData, setActiveStep, isAnalyzing, setIsAnalyzing } = useBill();
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editedItems, setEditedItems] = useState<
@@ -20,29 +20,46 @@ const BillAnalysis: React.FC = () => {
   const [subtotal, setSubtotal] = useState(0);
   const [tax, setTax] = useState(0);
   const [total, setTotal] = useState(0);
+  const [ocrError, setOcrError] = useState<string | null>(null);
   
   useEffect(() => {
     if (currentImage) {
-      // In a real app, we would process the image using OCR
-      // For now, we'll use mock data
-      setTimeout(() => {
-        const result = parseReceiptMock();
-        
-        setEditedItems(result.items.map(item => ({
-          ...item,
-          id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-        })));
-        
-        setStoreName(result.storeName || 'Costco');
-        setDate(result.date || new Date().toISOString().split('T')[0]);
-        setSubtotal(result.subtotal);
-        setTax(result.tax);
-        setTotal(result.total);
-        
-        setIsLoading(false);
-      }, 1000);
+      setIsLoading(true);
+      setOcrError(null);
+      
+      // Process the image using OCR
+      parseReceipt(currentImage)
+        .then(result => {
+          setEditedItems(result.items);
+          setStoreName(result.storeName || 'Costco');
+          setDate(result.date || new Date().toISOString().split('T')[0]);
+          setSubtotal(result.subtotal);
+          setTax(result.tax);
+          setTotal(result.total);
+          
+          if (result.items.length === 0) {
+            toast({
+              title: "Warning",
+              description: "Could not detect items automatically. You may need to add them manually.",
+              variant: "destructive"
+            });
+          }
+        })
+        .catch(error => {
+          console.error('Error processing receipt:', error);
+          setOcrError('Failed to process receipt. Please try again or edit manually.');
+          toast({
+            title: "Error",
+            description: "Failed to analyze receipt. You can still add items manually.",
+            variant: "destructive"
+          });
+        })
+        .finally(() => {
+          setIsLoading(false);
+          setIsAnalyzing(false);
+        });
     }
-  }, [currentImage]);
+  }, [currentImage, setIsAnalyzing]);
   
   const updateTotals = () => {
     const newSubtotal = editedItems.reduce((sum, item) => sum + item.price, 0);
@@ -120,7 +137,7 @@ const BillAnalysis: React.FC = () => {
                 <div className="h-10 bg-secondary rounded"></div>
               </div>
             </div>
-            <p className="text-muted-foreground mt-4">Analyzing your receipt...</p>
+            <p className="text-muted-foreground mt-4">Analyzing your receipt using OCR...</p>
           </div>
         </Card>
       </div>
@@ -149,6 +166,13 @@ const BillAnalysis: React.FC = () => {
             )}
           </Button>
         </div>
+        
+        {ocrError && (
+          <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md text-sm text-destructive">
+            <AlertCircle size={16} className="inline-block mr-2" />
+            {ocrError}
+          </div>
+        )}
         
         <Card className="glass-card p-4 mb-6">
           <div className="flex justify-between mb-2">

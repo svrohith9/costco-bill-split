@@ -1,6 +1,6 @@
+// This file contains image processing utilities including OCR functionality
 
-// This file would contain image processing utilities in a real app
-// For now, it's a placeholder for future implementation
+import * as Tesseract from 'tesseract.js';
 
 // Function to convert an image to base64
 export const imageToBase64 = (file: File): Promise<string> => {
@@ -54,5 +54,21 @@ export const compressImage = (base64: string, maxWidth = 1200, maxHeight = 1600,
   });
 };
 
-// In a real app, we would have OCR functions here
-// For example, using Tesseract.js or a cloud OCR API
+// Function to perform OCR on an image
+export const performOCR = async (imageUrl: string): Promise<string> => {
+  try {
+    console.log('Starting OCR process...');
+    
+    const worker = await Tesseract.createWorker('eng');
+    const ret = await worker.recognize(imageUrl);
+    const text = ret.data.text;
+    
+    console.log('OCR completed successfully');
+    await worker.terminate();
+    
+    return text;
+  } catch (error) {
+    console.error('OCR failed:', error);
+    throw new Error('Failed to extract text from image');
+  }
+};
