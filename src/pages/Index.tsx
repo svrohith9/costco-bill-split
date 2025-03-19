@@ -10,6 +10,17 @@ import SummaryView from '@/components/SummaryView';
 const AppContent: React.FC = () => {
   const { activeStep } = useBill();
   
+  // Set page title based on the active step
+  const getStepTitle = () => {
+    switch (activeStep) {
+      case 0: return 'Capture Receipt';
+      case 1: return 'Analyze Receipt';
+      case 2: return 'Split Bill';
+      case 3: return 'Summary';
+      default: return 'Bill Splitter';
+    }
+  };
+  
   return (
     <div className="min-h-screen flex flex-col">
       <Header />

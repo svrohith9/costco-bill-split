@@ -1,3 +1,4 @@
+
 // This file contains image processing utilities including OCR functionality
 
 import * as Tesseract from 'tesseract.js';
@@ -59,7 +60,23 @@ export const performOCR = async (imageUrl: string): Promise<string> => {
   try {
     console.log('Starting OCR process...');
     
-    const worker = await Tesseract.createWorker('eng');
+    // Fix: Use proper worker options object instead of just language string
+    const worker = await Tesseract.createWorker({
+      logger: m => console.log(m),
+      langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+      gzip: false
+    });
+    
+    // Set language to English
+    await worker.loadLanguage('eng');
+    await worker.initialize('eng');
+    
+    // Set parameters to improve OCR on receipts
+    await worker.setParameters({
+      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,$%:/ -',
+      preserve_interword_spaces: '1',
+    });
+    
     const ret = await worker.recognize(imageUrl);
     const text = ret.data.text;
     

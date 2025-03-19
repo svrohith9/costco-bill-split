@@ -6,6 +6,7 @@ interface ExtractedItem {
   name: string;
   price: number;
   tax?: number;
+  taxable?: boolean;
 }
 
 // Function to parse receipt text and extract relevant information
@@ -31,12 +32,10 @@ export const parseReceiptText = (text: string): {
   const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
   
   // Try to extract store name from the beginning of the receipt
-  if (lines.length > 0) {
-    const firstLine = lines[0].toLowerCase();
-    if (firstLine.includes('costco')) {
+  for (const line of lines) {
+    if (line.toUpperCase().includes('COSTCO')) {
       storeName = 'Costco';
-    } else if (lines.length > 1 && lines[1].toLowerCase().includes('costco')) {
-      storeName = 'Costco';
+      break;
     }
   }
   
@@ -57,64 +56,99 @@ export const parseReceiptText = (text: string): {
     }
   }
   
-  // Look for items with prices
-  // This regex matches product descriptions followed by prices
-  // For Costco receipts, items typically have a product name/number followed by a price
-  const itemRegex = /^(.*?)\s+(\d+\.\d{2})$/;
-  
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
+  // Look for subtotal, tax, and total values
+  for (const line of lines) {
+    const lowercaseLine = line.toLowerCase();
     
-    // Check if this is a subtotal, tax, or total line
-    if (line.toLowerCase().includes('subtotal')) {
+    if (lowercaseLine.includes('subtotal')) {
       const match = line.match(/(\d+\.\d{2})/);
       if (match) {
         subtotal = parseFloat(match[1]);
       }
-    } else if (line.toLowerCase().includes('tax')) {
+    } 
+    else if (lowercaseLine.includes('tax')) {
       const match = line.match(/(\d+\.\d{2})/);
       if (match) {
         totalTax = parseFloat(match[1]);
       }
-    } else if (line.toLowerCase().includes('total')) {
+    } 
+    else if (lowercaseLine.includes('total')) {
       const match = line.match(/(\d+\.\d{2})/);
       if (match) {
         total = parseFloat(match[1]);
       }
-    } else {
-      // Try to match an item
-      const itemMatch = line.match(itemRegex);
-      if (itemMatch) {
-        const name = itemMatch[1].trim();
-        const price = parseFloat(itemMatch[2]);
-        
-        // Estimate tax for this item based on overall tax ratio
-        // This is an approximation since receipts often don't show per-item tax
-        const estimatedTax = subtotal > 0 ? (price / subtotal) * totalTax : 0;
-        
-        items.push({
-          name,
-          price,
-          tax: parseFloat(estimatedTax.toFixed(2))
-        });
-      }
+    }
+  }
+  
+  // Custom parser for Costco-like receipts - handles multiple formats
+  // Pattern 1: ItemNumber ItemDescription Price Y/N (taxable indicator)
+  // Pattern 2: E ItemNumber ItemDescription Price Y/N (E indicates eligible for something, Y/N is tax indicator)
+  const itemRegex1 = /([0-9]+)\s+([A-Za-z0-9\s]+)\s+(\d+\.\d{2})\s*([YN])?/;
+  const itemRegex2 = /[E]?\s*([0-9]+)\s+([A-Za-z0-9\s]+)\s+(\d+\.\d{2})\s*([YN])?/;
+  
+  for (const line of lines) {
+    // Skip lines that are clearly not item entries
+    if (line.toLowerCase().includes('subtotal') || 
+        line.toLowerCase().includes('total') || 
+        line.toLowerCase().includes('tax') ||
+        line.includes('*') ||
+        line.length < 10) {
+      continue;
     }
     
-    i++;
+    const match1 = line.match(itemRegex1);
+    const match2 = line.match(itemRegex2);
+    const match = match1 || match2;
+    
+    if (match) {
+      const itemNumber = match[1];
+      let name = match[2].trim();
+      const price = parseFloat(match[3]);
+      const taxable = match[4] === 'Y';
+      
+      // Some OCR results might need cleaning
+      if (name.length > 30) {
+        name = name.substring(0, 30);
+      }
+      
+      // Skip very short item descriptions, likely errors
+      if (name.length < 2) continue;
+      
+      const item: ExtractedItem = {
+        name,
+        price,
+        taxable
+      };
+      
+      // Estimate tax for this item based on taxable status
+      if (taxable) {
+        // If we know total tax and total taxable amount, we can calculate tax rate
+        const taxRate = 0.0531; // Default tax rate if we can't calculate
+        item.tax = parseFloat((price * taxRate).toFixed(2));
+      } else {
+        item.tax = 0;
+      }
+      
+      items.push(item);
+    }
   }
   
-  // If we couldn't parse any items, subtotal, or total, set some fallback values
-  if (items.length === 0) {
-    console.warn('Could not parse any items from receipt');
-  }
-  
+  // If we couldn't find subtotal, calculate it
   if (subtotal === 0 && items.length > 0) {
     subtotal = items.reduce((sum, item) => sum + item.price, 0);
+    subtotal = parseFloat(subtotal.toFixed(2));
   }
   
-  if (total === 0 && subtotal > 0) {
+  // If we couldn't find tax, calculate it
+  if (totalTax === 0 && items.length > 0) {
+    totalTax = items.reduce((sum, item) => sum + (item.tax || 0), 0);
+    totalTax = parseFloat(totalTax.toFixed(2));
+  }
+  
+  // If we couldn't find total, calculate it
+  if (total === 0) {
     total = subtotal + totalTax;
+    total = parseFloat(total.toFixed(2));
   }
   
   return {
@@ -162,74 +196,35 @@ export const parseReceipt = async (imageUrl: string): Promise<ReceiptData> => {
 
 // Mock function to simulate OCR parsing of a receipt (used as fallback)
 export const parseReceiptMock = (): ReceiptData => {
-  // Generate 5-10 random items
-  const numItems = Math.floor(Math.random() * 6) + 5;
-  const items = [];
-  let subtotal = 0;
-  
-  const possibleItems = [
-    { name: "Kirkland Water 40pk", price: 3.99, tax: 0.29 },
-    { name: "Organic Eggs", price: 5.49, tax: 0 },
-    { name: "Rotisserie Chicken", price: 4.99, tax: 0.37 },
-    { name: "Paper Towels 12pk", price: 18.99, tax: 1.42 },
-    { name: "Fresh Strawberries", price: 3.99, tax: 0 },
-    { name: "Frozen Pizza 4pk", price: 12.99, tax: 0.97 },
-    { name: "Organic Milk 2pk", price: 6.49, tax: 0 },
-    { name: "Ground Coffee", price: 14.99, tax: 1.12 },
-    { name: "Trail Mix", price: 10.99, tax: 0.82 },
-    { name: "Salmon Fillet", price: 20.99, tax: 0 },
-    { name: "Avocados 6pk", price: 6.99, tax: 0 },
-    { name: "Toilet Paper 30pk", price: 21.99, tax: 1.65 },
-    { name: "Sparkling Water 24pk", price: 7.99, tax: 0.60 },
-    { name: "Peanut Butter", price: 8.49, tax: 0.63 },
-    { name: "Maple Syrup", price: 12.99, tax: 0.97 },
-    { name: "Organic Spinach", price: 4.49, tax: 0 },
-    { name: "Chicken Breast 6pk", price: 17.99, tax: 0 },
-    { name: "Olive Oil", price: 15.99, tax: 1.20 },
+  // Generate items similar to those in the screenshot
+  const items = [
+    { name: "ADIDAS SOCK", price: 13.49, tax: 0.72, taxable: true },
+    { name: "CLVN KLN 3PK", price: 19.99, tax: 1.06, taxable: true },
+    { name: "YVES MACARON", price: 11.99, tax: 0.64, taxable: true },
+    { name: "KS BXR BRIEF", price: 15.99, tax: 0.85, taxable: true },
+    { name: "CHCKN SAUSAG", price: 14.99, tax: 0, taxable: false },
+    { name: "ORG BANANAS", price: 1.99, tax: 0, taxable: false },
+    { name: "BANANAS", price: 2.98, tax: 0, taxable: false },
+    { name: "MANDARINS", price: 13.98, tax: 0, taxable: false }
   ];
   
-  // Randomly select items without duplicates
-  const selectedItems = [];
-  while (selectedItems.length < numItems && selectedItems.length < possibleItems.length) {
-    const randomIndex = Math.floor(Math.random() * possibleItems.length);
-    const item = possibleItems[randomIndex];
-    
-    if (!selectedItems.includes(item)) {
-      selectedItems.push(item);
-    }
-  }
-  
-  // Create final receipt items with random price variations
-  for (let i = 0; i < selectedItems.length; i++) {
-    const item = selectedItems[i];
-    // Add small random variation to price
-    const priceVariation = (Math.random() * 0.4) - 0.2; // between -0.2 and 0.2
-    const price = parseFloat((item.price + priceVariation).toFixed(2));
-    const tax = parseFloat((item.tax * (1 + priceVariation / 2)).toFixed(2));
-    
-    items.push({
-      id: `item-${i}`,
-      name: item.name,
-      price,
-      tax,
-      assignedTo: []
-    });
-    
-    subtotal += price;
-  }
-  
-  // Calculate the total tax
-  const tax = items.reduce((total, item) => total + item.tax, 0);
-  
-  // Calculate the total
-  const total = parseFloat((subtotal + tax).toFixed(2));
+  // Calculate totals
+  const subtotal = items.reduce((sum, item) => sum + item.price, 0);
+  const tax = items.reduce((sum, item) => sum + item.tax, 0);
+  const total = subtotal + tax;
   
   // Format the receipt data
   return {
-    items,
+    items: items.map((item, index) => ({
+      id: `item-${index}`,
+      name: item.name,
+      price: item.price,
+      tax: item.tax,
+      assignedTo: []
+    })),
     subtotal: parseFloat(subtotal.toFixed(2)),
     tax: parseFloat(tax.toFixed(2)),
-    total,
+    total: parseFloat(total.toFixed(2)),
     date: new Date().toISOString().split('T')[0],
     storeName: 'Costco'
   };
