@@ -6,7 +6,6 @@ export interface ReceiptItem {
   id: string;
   name: string;
   price: number;
-  tax: number;
   assignedTo: string[];
 }
 
@@ -18,7 +17,6 @@ export interface Person {
 export interface ReceiptData {
   items: ReceiptItem[];
   subtotal: number;
-  tax: number;
   total: number;
   date?: string;
   storeName?: string;
@@ -45,7 +43,6 @@ interface BillContextType {
 const defaultReceiptData: ReceiptData = {
   items: [],
   subtotal: 0,
-  tax: 0,
   total: 0
 };
 
@@ -143,11 +140,10 @@ export const BillProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     receiptData.items.forEach(item => {
       const assignedPeople = item.assignedTo.length;
       if (assignedPeople > 0) {
-        const perPersonBase = item.price / assignedPeople;
-        const perPersonTax = item.tax / assignedPeople;
+        const perPersonAmount = item.price / assignedPeople;
         
         item.assignedTo.forEach(personId => {
-          amounts[personId] += perPersonBase + perPersonTax;
+          amounts[personId] += perPersonAmount;
         });
       }
     });

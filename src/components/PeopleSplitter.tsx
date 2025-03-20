@@ -148,7 +148,7 @@ const PeopleSplitter: React.FC = () => {
             <div key={item.id} className="py-3 border-b last:border-b-0">
               <div className="flex justify-between mb-2">
                 <span className="font-medium">{item.name}</span>
-                <span>${(item.price + item.tax).toFixed(2)}</span>
+                <span>${item.price.toFixed(2)}</span>
               </div>
               
               {people.length > 0 ? (

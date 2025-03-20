@@ -119,10 +119,6 @@ const SummaryView: React.FC = () => {
               <span className="text-muted-foreground">Receipt Total</span>
               <span>${receiptData.total.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Tax</span>
-              <span>${receiptData.tax.toFixed(2)}</span>
-            </div>
             <div className="flex justify-between font-medium pt-2 border-t">
               <span>Total Assigned</span>
               <span>${getTotalAssignedAmount().toFixed(2)}</span>

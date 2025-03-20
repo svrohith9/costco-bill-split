@@ -5,8 +5,6 @@ import { performOCR } from './imageProcessing';
 interface ExtractedItem {
   name: string;
   price: number;
-  tax?: number;
-  taxable?: boolean;
 }
 
 // Function to parse receipt text and extract relevant information
@@ -15,7 +13,6 @@ export const parseReceiptText = (text: string): {
   storeName: string;
   date: string;
   subtotal: number;
-  tax: number;
   total: number;
 } => {
   console.log('Parsing receipt text:', text);
@@ -24,7 +21,6 @@ export const parseReceiptText = (text: string): {
   let storeName = 'Costco';
   let date = new Date().toISOString().split('T')[0];
   let subtotal = 0;
-  let totalTax = 0;
   let total = 0;
   const items: ExtractedItem[] = [];
   
@@ -56,7 +52,7 @@ export const parseReceiptText = (text: string): {
     }
   }
   
-  // Look for subtotal, tax, and total values
+  // Look for subtotal and total values
   for (const line of lines) {
     const lowercaseLine = line.toLowerCase();
     
@@ -64,12 +60,6 @@ export const parseReceiptText = (text: string): {
       const match = line.match(/(\d+\.\d{2})/);
       if (match) {
         subtotal = parseFloat(match[1]);
-      }
-    } 
-    else if (lowercaseLine.includes('tax')) {
-      const match = line.match(/(\d+\.\d{2})/);
-      if (match) {
-        totalTax = parseFloat(match[1]);
       }
     } 
     else if (lowercaseLine.includes('total')) {
@@ -104,7 +94,6 @@ export const parseReceiptText = (text: string): {
       const itemNumber = match[1];
       let name = match[2].trim();
       const price = parseFloat(match[3]);
-      const taxable = match[4] === 'Y';
       
       // Some OCR results might need cleaning
       if (name.length > 30) {
@@ -116,18 +105,8 @@ export const parseReceiptText = (text: string): {
       
       const item: ExtractedItem = {
         name,
-        price,
-        taxable
+        price
       };
-      
-      // Estimate tax for this item based on taxable status
-      if (taxable) {
-        // If we know total tax and total taxable amount, we can calculate tax rate
-        const taxRate = 0.0531; // Default tax rate if we can't calculate
-        item.tax = parseFloat((price * taxRate).toFixed(2));
-      } else {
-        item.tax = 0;
-      }
       
       items.push(item);
     }
@@ -139,15 +118,9 @@ export const parseReceiptText = (text: string): {
     subtotal = parseFloat(subtotal.toFixed(2));
   }
   
-  // If we couldn't find tax, calculate it
-  if (totalTax === 0 && items.length > 0) {
-    totalTax = items.reduce((sum, item) => sum + (item.tax || 0), 0);
-    totalTax = parseFloat(totalTax.toFixed(2));
-  }
-  
-  // If we couldn't find total, calculate it
+  // If we couldn't find total, use subtotal
   if (total === 0) {
-    total = subtotal + totalTax;
+    total = subtotal;
     total = parseFloat(total.toFixed(2));
   }
   
@@ -156,7 +129,6 @@ export const parseReceiptText = (text: string): {
     storeName,
     date,
     subtotal,
-    tax: totalTax,
     total
   };
 };
@@ -177,11 +149,9 @@ export const parseReceipt = async (imageUrl: string): Promise<ReceiptData> => {
         id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         name: item.name,
         price: item.price,
-        tax: item.tax || 0,
         assignedTo: []
       })),
       subtotal: parsed.subtotal,
-      tax: parsed.tax,
       total: parsed.total,
       date: parsed.date,
       storeName: parsed.storeName
@@ -198,20 +168,18 @@ export const parseReceipt = async (imageUrl: string): Promise<ReceiptData> => {
 export const parseReceiptMock = (): ReceiptData => {
   // Generate items similar to those in the screenshot
   const items = [
-    { name: "ADIDAS SOCK", price: 13.49, tax: 0.72, taxable: true },
-    { name: "CLVN KLN 3PK", price: 19.99, tax: 1.06, taxable: true },
-    { name: "YVES MACARON", price: 11.99, tax: 0.64, taxable: true },
-    { name: "KS BXR BRIEF", price: 15.99, tax: 0.85, taxable: true },
-    { name: "CHCKN SAUSAG", price: 14.99, tax: 0, taxable: false },
-    { name: "ORG BANANAS", price: 1.99, tax: 0, taxable: false },
-    { name: "BANANAS", price: 2.98, tax: 0, taxable: false },
-    { name: "MANDARINS", price: 13.98, tax: 0, taxable: false }
+    { name: "ADIDAS SOCK", price: 13.49 },
+    { name: "CLVN KLN 3PK", price: 19.99 },
+    { name: "YVES MACARON", price: 11.99 },
+    { name: "KS BXR BRIEF", price: 15.99 },
+    { name: "CHCKN SAUSAG", price: 14.99 },
+    { name: "ORG BANANAS", price: 1.99 },
+    { name: "BANANAS", price: 2.98 },
+    { name: "MANDARINS", price: 13.98 }
   ];
   
-  // Calculate totals
+  // Calculate total
   const subtotal = items.reduce((sum, item) => sum + item.price, 0);
-  const tax = items.reduce((sum, item) => sum + item.tax, 0);
-  const total = subtotal + tax;
   
   // Format the receipt data
   return {
@@ -219,12 +187,10 @@ export const parseReceiptMock = (): ReceiptData => {
       id: `item-${index}`,
       name: item.name,
       price: item.price,
-      tax: item.tax,
       assignedTo: []
     })),
     subtotal: parseFloat(subtotal.toFixed(2)),
-    tax: parseFloat(tax.toFixed(2)),
-    total: parseFloat(total.toFixed(2)),
+    total: parseFloat(subtotal.toFixed(2)),
     date: new Date().toISOString().split('T')[0],
     storeName: 'Costco'
   };

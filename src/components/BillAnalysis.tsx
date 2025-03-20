@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useBill } from '@/context/BillContext';
 import { Button } from '@/components/ui/button';
@@ -13,19 +14,15 @@ const BillAnalysis: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editedItems, setEditedItems] = useState<
-    Array<{ id: string; name: string; price: number; tax: number }>
+    Array<{ id: string; name: string; price: number }>
   >([]);
   const [storeName, setStoreName] = useState('Costco');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [subtotal, setSubtotal] = useState(0);
-  const [tax, setTax] = useState(0);
-  const [total, setTotal] = useState(0);
-  const [ocrError, setOcrError] = useState<string | null>(null);
   
   useEffect(() => {
     if (currentImage) {
       setIsLoading(true);
-      setOcrError(null);
       
       // Process the image using OCR
       parseReceipt(currentImage)
@@ -34,8 +31,6 @@ const BillAnalysis: React.FC = () => {
           setStoreName(result.storeName || 'Costco');
           setDate(result.date || new Date().toISOString().split('T')[0]);
           setSubtotal(result.subtotal);
-          setTax(result.tax);
-          setTotal(result.total);
           
           if (result.items.length === 0) {
             toast({
@@ -47,7 +42,6 @@ const BillAnalysis: React.FC = () => {
         })
         .catch(error => {
           console.error('Error processing receipt:', error);
-          setOcrError('Failed to process receipt. Please try again or edit manually.');
           toast({
             title: "Error",
             description: "Failed to analyze receipt. You can still add items manually.",
@@ -63,13 +57,10 @@ const BillAnalysis: React.FC = () => {
   
   const updateTotals = () => {
     const newSubtotal = editedItems.reduce((sum, item) => sum + item.price, 0);
-    const newTax = editedItems.reduce((sum, item) => sum + item.tax, 0);
     setSubtotal(parseFloat(newSubtotal.toFixed(2)));
-    setTax(parseFloat(newTax.toFixed(2)));
-    setTotal(parseFloat((newSubtotal + newTax).toFixed(2)));
   };
   
-  const handleItemChange = (id: string, field: 'name' | 'price' | 'tax', value: string) => {
+  const handleItemChange = (id: string, field: 'name' | 'price', value: string) => {
     const updatedItems = editedItems.map(item => {
       if (item.id === id) {
         if (field === 'name') {
@@ -83,7 +74,7 @@ const BillAnalysis: React.FC = () => {
     });
     
     setEditedItems(updatedItems);
-    if (field === 'price' || field === 'tax') {
+    if (field === 'price') {
       setTimeout(updateTotals, 100);
     }
   };
@@ -92,8 +83,7 @@ const BillAnalysis: React.FC = () => {
     const newItem = {
       id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       name: 'New Item',
-      price: 0,
-      tax: 0
+      price: 0
     };
     
     setEditedItems([...editedItems, newItem]);
@@ -113,8 +103,7 @@ const BillAnalysis: React.FC = () => {
         assignedTo: []
       })),
       subtotal,
-      tax,
-      total,
+      total: subtotal,
       date,
       storeName
     };
@@ -166,13 +155,6 @@ const BillAnalysis: React.FC = () => {
             )}
           </Button>
         </div>
-        
-        {ocrError && (
-          <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md text-sm text-destructive">
-            <AlertCircle size={16} className="inline-block mr-2" />
-            {ocrError}
-          </div>
-        )}
         
         <Card className="glass-card p-4 mb-6">
           <div className="flex justify-between mb-2">
@@ -227,7 +209,7 @@ const BillAnalysis: React.FC = () => {
               <div key={item.id} className="flex items-center justify-between py-2 border-b last:border-b-0">
                 {isEditing ? (
                   <div className="grid grid-cols-12 gap-2 w-full">
-                    <div className="col-span-6">
+                    <div className="col-span-8">
                       <Label htmlFor={`item-name-${item.id}`} className="text-xs text-muted-foreground">Item</Label>
                       <Input
                         id={`item-name-${item.id}`}
@@ -236,7 +218,7 @@ const BillAnalysis: React.FC = () => {
                         className="h-8"
                       />
                     </div>
-                    <div className="col-span-2">
+                    <div className="col-span-3">
                       <Label htmlFor={`item-price-${item.id}`} className="text-xs text-muted-foreground">Price</Label>
                       <Input
                         id={`item-price-${item.id}`}
@@ -247,18 +229,7 @@ const BillAnalysis: React.FC = () => {
                         className="h-8"
                       />
                     </div>
-                    <div className="col-span-2">
-                      <Label htmlFor={`item-tax-${item.id}`} className="text-xs text-muted-foreground">Tax</Label>
-                      <Input
-                        id={`item-tax-${item.id}`}
-                        type="number"
-                        step="0.01"
-                        value={item.tax}
-                        onChange={(e) => handleItemChange(item.id, 'tax', e.target.value)}
-                        className="h-8"
-                      />
-                    </div>
-                    <div className="col-span-2 flex items-end pb-1">
+                    <div className="col-span-1 flex items-end pb-1">
                       <Button 
                         variant="ghost" 
                         size="icon"
@@ -276,7 +247,6 @@ const BillAnalysis: React.FC = () => {
                     </div>
                     <div className="text-right">
                       <div>${item.price.toFixed(2)}</div>
-                      <div className="text-xs text-muted-foreground">Tax: ${item.tax.toFixed(2)}</div>
                     </div>
                   </>
                 )}
@@ -294,17 +264,9 @@ const BillAnalysis: React.FC = () => {
         
         <Card className="glass-card p-4 mb-6">
           <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span>${subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Tax</span>
-              <span>${tax.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between font-medium pt-2 border-t">
+            <div className="flex justify-between font-medium">
               <span>Total</span>
-              <span>${total.toFixed(2)}</span>
+              <span>${subtotal.toFixed(2)}</span>
             </div>
           </div>
         </Card>
