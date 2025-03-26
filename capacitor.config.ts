@@ -16,6 +16,18 @@ const config: CapacitorConfig = {
     scheme: 'appscheme',
     cordovaSwiftVersion: '5.1',
     deploymentTarget: '13.0'
+  },
+  android: {
+    backgroundColor: '#ffffff',
+    buildOptions: {
+      keystorePath: 'keystore.jks',
+      keystorePassword: 'yourkeystorepassword',
+      keystoreAlias: 'billsplitter',
+      keystoreAliasPassword: 'youraliaspassword',
+    },
+    allowMixedContent: true,
+    captureInput: true,
+    webViewAllowFileAccess: true
   }
 };
 
