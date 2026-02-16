@@ -1,0 +1,33 @@
+name: Bug report
+description: Report a reproducible bug
+labels: [bug]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to ...
+        2. Upload/capture ...
+        3. Click ...
+        4. Observe ...
+    validations:
+      required: true
+  - type: input
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: Browser/device + OS

@@ -1,69 +1,109 @@
-# Welcome to your Lovable project
+# Costco Bill Split
 
-## Project info
+A mobile-friendly React app to split Costco receipts among friends.
 
-**URL**: https://lovable.dev/projects/72ad2799-6076-45da-9354-5a28c99411d9
+It uses on-device OCR (`tesseract.js`) to extract line items from receipt photos, lets users correct parsed values, assign items to people, and generates a final per-person summary.
 
-## How can I edit this code?
+## Overview
 
-There are several ways of editing your application.
+- Capture a receipt using camera or upload an image
+- OCR-based item extraction with editable results
+- Assign items across people and compute totals
+- Client-side processing (no backend required for core flow)
+- Capacitor-ready setup for mobile packaging
 
-**Use Lovable**
+## Architecture / Stack
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/72ad2799-6076-45da-9354-5a28c99411d9) and start prompting.
+- **Frontend:** React 18 + TypeScript + Vite
+- **UI:** TailwindCSS + shadcn/ui + Radix
+- **State:** React Context (`BillContext`)
+- **OCR:** `tesseract.js`
+- **Mobile packaging:** Capacitor (Android/iOS)
 
-Changes made via Lovable will be committed automatically to this repo.
+```mermaid
+flowchart LR
+  A[Receipt Capture] --> B[Image Compression]
+  B --> C[OCR Parsing]
+  C --> D[Manual Corrections]
+  D --> E[People Assignment]
+  E --> F[Summary Per Person]
+```
 
-**Use your preferred IDE**
+## Quickstart
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Prerequisites
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- Node.js 18+
+- npm (project also includes `bun.lockb`, but npm is supported)
 
-Follow these steps:
+### Install
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+```bash
+npm install
+```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+## Environment Variables
 
-# Step 3: Install the necessary dependencies.
-npm i
+This project currently does **not** require runtime environment variables for local development.
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+## Run
+
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Default local URL: `http://localhost:5173`
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Test
 
-**Use GitHub Codespaces**
+There is no dedicated automated test script yet.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+You can still validate quality with:
 
-## What technologies are used for this project?
+```bash
+npm run lint
+npm run build
+```
 
-This project is built with .
+## Deployment
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### Static web deployment
 
-## How can I deploy this project?
+Build and deploy the generated `dist/` output:
 
-Simply open [Lovable](https://lovable.dev/projects/72ad2799-6076-45da-9354-5a28c99411d9) and click on Share -> Publish.
+```bash
+npm run build
+npm run preview
+```
 
-## I want to use a custom domain - is that possible?
+### Mobile packaging (Capacitor)
 
-We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
+Capacitor dependencies are present (`@capacitor/*`). Typical flow:
+
+1. Build web assets (`npm run build`)
+2. Sync Capacitor platform projects
+3. Open Android/iOS project in native tooling
+
+## Troubleshooting
+
+- **Camera permission denied**
+  - Allow camera access in browser/mobile app settings.
+- **OCR accuracy is low**
+  - Use brighter lighting, reduce glare, and capture the full receipt.
+- **Slow OCR on large images**
+  - Use a clear but compressed image (the app already performs compression).
+- **Build fails due to Node version**
+  - Use Node 18+ and reinstall dependencies.
+
+## API Notes
+
+This is a frontend-only project; there are no server API endpoints in this repository.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
+
+## License
+
+No `LICENSE` file is currently present in this repository.
+To avoid guessing legal intent, this documentation update does not add one.
