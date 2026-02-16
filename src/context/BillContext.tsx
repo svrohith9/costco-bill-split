@@ -1,7 +1,6 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { z } from 'zod';
 
-// Define types
 export interface ReceiptItem {
   id: string;
   name: string;
@@ -40,11 +39,35 @@ interface BillContextType {
   setIsAnalyzing: (status: boolean) => void;
 }
 
-const defaultReceiptData: ReceiptData = {
-  items: [],
-  subtotal: 0,
-  total: 0
-};
+const STORAGE_KEY = 'costco-bill-split:v1';
+
+const personSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1).max(50)
+});
+
+const receiptItemSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  price: z.number().finite().nonnegative(),
+  assignedTo: z.array(z.string())
+});
+
+const receiptSchema = z.object({
+  items: z.array(receiptItemSchema),
+  subtotal: z.number().finite().nonnegative(),
+  total: z.number().finite().nonnegative(),
+  date: z.string().optional(),
+  storeName: z.string().optional()
+});
+
+const persistedStateSchema = z.object({
+  activeStep: z.number().int().min(0).max(3),
+  currentImage: z.string().nullable(),
+  receiptData: receiptSchema.nullable(),
+  people: z.array(personSchema),
+  isAnalyzing: z.boolean().default(false)
+});
 
 const BillContext = createContext<BillContextType | undefined>(undefined);
 
@@ -55,27 +78,60 @@ export const BillProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [people, setPeople] = useState<Person[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Add a new person
+  useEffect(() => {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+
+    const parsed = persistedStateSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      localStorage.removeItem(STORAGE_KEY);
+      return;
+    }
+
+    setActiveStep(parsed.data.activeStep);
+    setCurrentImage(parsed.data.currentImage);
+    setReceiptData(parsed.data.receiptData);
+    setPeople(parsed.data.people);
+    setIsAnalyzing(false);
+  }, []);
+
+  useEffect(() => {
+    const snapshot = {
+      activeStep,
+      currentImage,
+      receiptData,
+      people,
+      isAnalyzing
+    };
+
+    const validated = persistedStateSchema.safeParse(snapshot);
+    if (validated.success) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(validated.data));
+    }
+  }, [activeStep, currentImage, receiptData, people, isAnalyzing]);
+
   const addPerson = (name: string) => {
-    if (name.trim() === '') return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (trimmed.length > 50) return;
+    if (people.some((person) => person.name.toLowerCase() === trimmed.toLowerCase())) return;
+
     const newPerson: Person = {
       id: `person-${Date.now()}`,
-      name: name.trim()
+      name: trimmed
     };
     setPeople([...people, newPerson]);
   };
 
-  // Remove a person
   const removePerson = (id: string) => {
     setPeople(people.filter(person => person.id !== id));
-    
-    // Also unassign any items assigned to this person
+
     if (receiptData) {
       const updatedItems = receiptData.items.map(item => ({
         ...item,
         assignedTo: item.assignedTo.filter(personId => personId !== id)
       }));
-      
+
       setReceiptData({
         ...receiptData,
         items: updatedItems
@@ -83,32 +139,28 @@ export const BillProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Assign an item to a person
   const assignItemToPerson = (itemId: string, personId: string) => {
     if (!receiptData) return;
-    
+
     const updatedItems = receiptData.items.map(item => {
-      if (item.id === itemId) {
-        if (!item.assignedTo.includes(personId)) {
-          return {
-            ...item,
-            assignedTo: [...item.assignedTo, personId]
-          };
-        }
+      if (item.id === itemId && !item.assignedTo.includes(personId)) {
+        return {
+          ...item,
+          assignedTo: [...item.assignedTo, personId]
+        };
       }
       return item;
     });
-    
+
     setReceiptData({
       ...receiptData,
       items: updatedItems
     });
   };
 
-  // Unassign an item from a person
   const unassignItemFromPerson = (itemId: string, personId: string) => {
     if (!receiptData) return;
-    
+
     const updatedItems = receiptData.items.map(item => {
       if (item.id === itemId) {
         return {
@@ -118,50 +170,47 @@ export const BillProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
       return item;
     });
-    
+
     setReceiptData({
       ...receiptData,
       items: updatedItems
     });
   };
 
-  // Calculate split amounts for each person
   const calculateSplitAmounts = (): Record<string, number> => {
     if (!receiptData) return {};
-    
+
     const amounts: Record<string, number> = {};
-    
-    // Initialize amounts for each person
+
     people.forEach(person => {
       amounts[person.id] = 0;
     });
-    
-    // Calculate amount for each item
+
     receiptData.items.forEach(item => {
       const assignedPeople = item.assignedTo.length;
       if (assignedPeople > 0) {
         const perPersonAmount = item.price / assignedPeople;
-        
+
         item.assignedTo.forEach(personId => {
           amounts[personId] += perPersonAmount;
         });
       }
     });
-    
-    // Round to 2 decimal places
+
     Object.keys(amounts).forEach(personId => {
       amounts[personId] = Math.round(amounts[personId] * 100) / 100;
     });
-    
+
     return amounts;
   };
 
-  // Reset the current bill
   const resetBill = () => {
     setCurrentImage(null);
     setReceiptData(null);
     setPeople([]);
     setActiveStep(0);
+    setIsAnalyzing(false);
+    localStorage.removeItem(STORAGE_KEY);
   };
 
   return (
